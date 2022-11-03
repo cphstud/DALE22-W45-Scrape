@@ -23,21 +23,20 @@ colnames(resdf) <- names
 for (car in carlist) {
   tmpdf = as.data.frame(matrix(nrow = 1, ncol = 7))
   colnames(tmpdf) <- names
-  idtag="data-track-content-id"
-  carid <- car %>% html_attr(idtag)
+  
+  #get idtag
+  carid <- getcarid(car)
   tmpdf$id=carid
   
   #get price
-  prictag=".listing-price"
-  price <- car %>% html_nodes(prictag) %>% html_text() 
+  price <- getcarprice(car)
   tmpdf$price=price
   
   # get mpg, milage, year
-  infotag = ".listing-data"
-  infolist <-  car %>% html_nodes(infotag) %>% html_text()
+  infolist <- getinfolist(car)
   tmpdf$year=infolist[4]
   tmpdf$milage=infolist[3]
-  tmpdf$mpg=gsub("[\n ]","",infolist[2])
+  tmpdf$mpg=infolist[2]
   
   # get maketype-info
   maketypetag = ".darkLink"
@@ -51,4 +50,25 @@ for (car in carlist) {
   resdf <- rbind(resdf,tmpdf)
 }
 
+
+getcarid <- function(car) {
+  idtag="data-track-content-id"
+  carid <- car %>% html_attr(idtag)
+  return(carid)
+}
+
+getinfolist <- function(car) {
+  infotag <-  ".listing-data"
+  infolist <- car %>% html_nodes(infotag) %>% html_text()
+  infolist <- gsub("\n","",infolist)
+  infolist <- gsub(" ","",infolist)
+  infolist <- gsub("\\.","",infolist)
+  return(infolist)
+}
+
+getcarprice <- function(car) {
+  pricetag=".listing-price"
+  price <- car %>% html_nodes(pricetag) %>% html_text() 
+  return(price)
+}
 
