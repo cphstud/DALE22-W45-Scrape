@@ -18,17 +18,40 @@ condb <- dbConnect(MariaDB(),
 
 #selenium-stuff
 startlink <- 'https://www.bilbasen.dk/brugt/bil?IncludeEngrosCVR=true&PriceFrom=0&includeLeasing=false'
-rD <- rsDriver(port = 4591L, browser = c('firefox'))
+startlink <- 'https://www.edc.dk/sog/?ejd-typer=1'
+rD <- rsDriver(port = 4593L, browser = c('firefox'))
 rclient <- rD[['client']]
 rclient$navigate(startlink)
 
 #rvest
-maincartag=".bb-listing-clickable"
-#carhtml <- read_html(pagesource[[1]])
-#carlist <- carhtml %>% html_nodes(maincartag)
+maincartag=".propertyitem--list .media__link__wrapper"
+mainhousetag=".propertyitem--list"
+pagesource <- rclient$getPageSource()
+househtml <- read_html(pagesource[[1]])
+houselist <- househtml %>% html_nodes(mainhousetag)
 
-resdf = as.data.frame(matrix(nrow = 0, ncol = 7))
-names=c("mpg","milage","maketype","id","region","year","price")
+testhouse = houselist[[4]]
+
+#get id
+idtag = ".propertyitem__openhouselink"
+houseid <- testhouse %>% html_elements("a") %>% html_attr("href")
+#houseid <- testhouse %>% html_elements(idtag)
+#houseid <- testhouse %>% html_nodes("div")
+
+#addr
+addrtag =".propertyitem__address--listview"
+addr <- testhouse %>% html_nodes(addrtag) %>% html_text()
+
+#pris
+pristag =".propertyitem__price"
+houseprice <- testhouse %>% html_nodes(pristag) %>% html_text()
+
+# stamdata i tabel
+hdata <- testhouse %>% html_element("table") %>% html_table()
+
+
+houseresdf = as.data.frame(matrix(nrow = 0, ncol = 7))
+names=c("sqm","milage","maketype","id","region","year","price")
 colnames(resdf) <- names
 maxlimit=3
 
@@ -36,7 +59,7 @@ for (counter in (1:maxlimit)) {
   pagesource <- rclient$getPageSource()
   carhtml <- read_html(pagesource[[1]])
   carlist <- carhtml %>% html_nodes(maincartag)
-
+  
   for (car in carlist) {
     tmpdf = as.data.frame(matrix(nrow = 1, ncol = 7))
     colnames(tmpdf) <- names
