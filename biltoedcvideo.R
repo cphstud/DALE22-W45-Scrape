@@ -21,32 +21,43 @@ condb <- dbConnect(MariaDB(),
 tmp <- file.path(tempdir(),"bb.log")
 lf <- log_open(tmp)
 
+# links
+x <- scan("linkstoedc", what="", sep="\n")
+ll <- list(x)
 #selenium-stuff
 startlink <- 'https://www.edc.dk/sog/?ejd-typer=1'
 rD <- rsDriver(port = 4539L, browser = c('firefox'))
 rclient <- rD[['client']]
 rclient$navigate(startlink)
-houspsource <- rclient$getPageSource()
+rclient$navigate("https://www.edc.dk")
+rclient$navigate(x[1])
+#houspsource <- rclient$getPageSource()
 
 
 #rvest
-basepaginglink <- 'https://www.edc.dk/sog/?ejd-typer=1&side='
+basepaginglink <- 'https://www.edc.dk/sog/?ejd-typer=1&antal=1000&side='
 endpageinglink <- '#lstsort'
 mainhousetag=".propertyitem__wrapper"
-totaldf = data.frame(matrix(ncol=13, nrow=0))
-housedfnames=c("m2","Grund","Rum","byggeaar","Liggetid", "plusminus","prism2","Ejerudgprmd","Sagsnr","Pris", "Solgt","Addr","Link")
+mainhousetag=".propertyitem--list"
+totaldf = data.frame(matrix(ncol=14, nrow=0))
+housedfnames=initnames()
 colnames(totaldf) = housedfnames
 
-maxlimit=3
+maxlimit=40
 
 #testhouse = houselist[[4]]
 
 #rclient$navigate(startlink)
 
 for (counter in (1:maxlimit)) {
-  tmplink <- paste0(basepaginglink,counter,endpageinglink)
+  #tmplink <- paste0(basepaginglink,counter,endpageinglink)
+  tmplink <- x[counter]
+  rclient$navigate(tmplink)
+  Sys.sleep(10)
   log_print(c("link: ",tmplink))
-  househtml <- read_html(tmplink)
+  tmpsource <- rclient$getPageSource()
+  househtml <- read_html(tmpsource[[1]])
+  #househtml <- read_html(tmplink)
   houselist <- househtml %>% html_nodes(mainhousetag)
   #pagesource <- rclient$getPageSource()
   #carhtml <- read_html(pagesource[[1]])
@@ -57,18 +68,22 @@ for (counter in (1:maxlimit)) {
     #tmpdf = as.data.frame(matrix(nrow = 1, ncol = 13))
     #colnames(tmpdf) <- housenames
     #house=testhouse
+    tlink <- ""
     housedf <- gethouselist(house)
     # get link
     linktag =".propertyitem__openhouselink"
-    tlink <- house %>% 
-      html_nodes(linktag) %>% 
-      html_attr("href") %>% 
-      paste0("https://edc.dk",.)
+    altlinktag =".propertyitem__link"
+    tlink <- getlink(house,linktag)
+    if (nchar(tlink) < 20) {
+      tlink <- getlink(house,altlinktag)
+    }
     
     housedf$link=tlink
+    log_print(c("tlink: ",tlink))
     
     #get sagsnr
     sagsnr <- getsagsnr(house)
+    log_print(c("Sagsnr: ",sagsnr))
     housedf$id=sagsnr
     
     #get price
@@ -80,16 +95,20 @@ for (counter in (1:maxlimit)) {
     address <-  house %>% html_nodes(regtag) %>% html_text()
     housedf$address=address
     
+    housedf$scrapedate=Sys.time()
+    housedf$solgt=FALSE
+    
     # get dealer
     tryCatch({  totaldf <- rbind(totaldf,housedf) },
-             error = function(e) {print(e)} )
+             warning = function(w) { print(c("Warning:",housedf$address)) },
+             error = function(e) {print(c("Error:",housedf$address))} )
   }
   #button=rclient$findElement(using = "class name","next")
   #button$clickElement()
   counter=counter+1
 }
 
-# save dataframe to file - RDS-format
+# save dataframe to fnile - RDS-format
 saveRDS(nresdf,"firsbb.rds")
 
 
@@ -104,12 +123,28 @@ dbWriteTable(condb,"mycars2",nresdfbu,overwrite=T)
 resdb=dbGetQuery(condb,"Select * from cars")
 
 
+getlink <- function(house,linktag){
+  tlink <- house %>% 
+    html_nodes(linktag) %>% 
+    html_attr("href") %>% 
+    paste0("https://edc.dk",.)
+  return(tlink)
+}
 
 getsagsnr <- function(house) {
-  hpattern='=([0-9]+)&'
-  resm=str_match(tlink,hpattern)
-  log_print(c("Sagsnr: ",resm))
-  sagsnr = resm[1,2]
+  sagsnr=0L
+  log_print(c("gets - tlink: ",tlink))
+  r=str_match(tlink,"viderestilling")
+  if (is.na(r[1,1])) {
+    hpattern='nr=([0-9]+)'
+    resm=str_match(tlink,hpattern)
+    sagsnr = resm[1,2]
+    log_print(c("Sagsnr: ",sagsnr))
+  } else {
+    ss <- house %>% html_attrs()
+    sagsnr = ss[[2]]
+    log_print(c("Sagsnr: ",sagsnr))
+  }
   return(sagsnr)
 }
 
@@ -152,4 +187,25 @@ savelogo <- function(s) {
     }
   )
   return(retval)
+}
+
+initnames <- function(){
+  nn2=character()
+  nn2[1]="m2"
+  nn2[2]="grund"
+  nn2[3]="rum"
+  nn2[4]="byggeaar"
+  nn2[5]="liggetid"
+  nn2[5]="plusminus"
+  nn2[5]="liggetid"
+  nn2[6]="plusminus"
+  nn2[7]="prism2"
+  nn2[8]="Ejerudgprmd"
+  nn2[9]="link"
+  nn2[10]="sagsnr"
+  nn2[11]="pris"
+  nn2[12]="adresse"
+  nn2[13]="sold"
+  nn2[14]="scrapedate"
+  return(nn2)
 }
