@@ -2,6 +2,8 @@ library(shadowr)
 library(rvest)
 library(RSelenium)
 library(dplyr)
+library(stringr)
+library(logr)
 library(RMariaDB)
 library(RMySQL)
 library(DBI)
@@ -35,18 +37,24 @@ rclient$navigate(startlink)
 
 #rvest
 maincartag=".bb-listing-clickable"
-nresdf = data.frame(matrix(ncol=13, nrow=0))
+xresdf = data.frame(matrix(ncol=13, nrow=0))
 nresnames=c("id","dealer","mpg","milage","year","price","nn","make","type","maketype","region","link","scrapedate")
-colnames(nresdf) = nresnames
+colnames(xresdf) = nresnames
 
 maxlimit=100
 
-testcar = carlist[[4]]
 
 baselooplink="https://www.bilbasen.dk/brugt/bil?includeengroscvr=true&pricefrom=0&includeleasing=false&page="
-baselooplink='https://www.bilbasen.dk/brugt/bil/Ford?make=Toyota&make=Volvo&IncludeEngrosCVR=true&PriceFrom=0&includeLeasing=false&Fuel=1&IncludeCallForPrice=false&page='
 baselooplink='https://www.bilbasen.dk/brugt/bil/ford?make=toyota&make=volvo&Fuel=1&PriceFrom=0&ZipCode=0000&IncludeEngrosCVR=True&Seller=1&IncludeSellForCustomer=True&IncludeWithoutVehicleRegistrationTax=True&IncludeLeasing=False&IncludeCallForPrice=False&HpFrom=&HpTo=&page='
 rclient$navigate(baselooplink)
+
+# for manual test
+testbaselooplink='https://www.bilbasen.dk/brugt/bil/Ford?make=Toyota&make=Volvo&IncludeEngrosCVR=true&PriceFrom=0&includeLeasing=false&Fuel=1&IncludeCallForPrice=false&page=1'
+rclient$navigate(testbaselooplink)
+pagesource <- rclient$getPageSource()
+testcarhtml <- read_html(pagesource[[1]])
+testcarlist <- testcarhtml %>% html_nodes(maincartag)
+testcar = testcarlist[[4]]
 
 for (counter in (1:maxlimit)) {
   log_print(c("counter: ",counter))
@@ -62,10 +70,8 @@ for (counter in (1:maxlimit)) {
     tmpdf = as.data.frame(matrix(nrow = 1, ncol = 7))
     colnames(tmpdf) <- names
     # get id
-    tlink <- car %>% 
-      html_nodes(".darkLink") %>% 
-      html_attr("href") %>% 
-      paste0("https://bilbasen.dk",.)
+    tlink <- gettlink(car)
+      
     
     tmpdf$link=tlink
     #get idtag
@@ -168,4 +174,20 @@ savelogo <- function(s) {
     }
   )
   return(retval)
+}
+
+gettlink <- function(car) {
+ tlink <- car %>% 
+      html_nodes(".darkLink") %>% 
+      html_attr("href") %>% 
+      paste0("https://bilbasen.dk",.)
+ return(tlink)
+}
+
+getdescription <- function(car) {
+  desctag=".listing-description"
+ descr <- car %>% 
+      html_nodes(desctag) %>% 
+      html_text()
+ return(descr)
 }
