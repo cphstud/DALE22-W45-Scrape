@@ -1,79 +1,56 @@
-library(shadowr)
 library(rvest)
 library(RSelenium)
 library(dplyr)
 library(stringr)
 library(logr)
-library(RMariaDB)
-library(RMySQL)
-library(DBI)
 library(colorfindr)
 
-# create database connection
-
-condb <- dbConnect(MariaDB(),
-                   db="mybilbasen",
-                   host="localhost",
-                   port=3306,
-                   user="root",
-                   password="root123")
-
 # logfile
-tmp <- file.path(tempdir(),"bb.log")
+tmp <- file.path("./logs","bb.log")
 lf <- log_open(tmp)
 
 #selenium-stuff
-startlink <- 'https://www.bilbasen.dk/brugt/bil?IncludeEngrosCVR=true&PriceFrom=0&includeLeasing=false'
-startlink <- ' https://www.bilbasen.dk/brugt/bil/Ford?make=Toyota&make=Volvo&IncludeEngrosCVR=true&PriceFrom=0&includeLeasing=false&Fuel=1&IncludeCallForPrice=false'
-rD <- rsDriver(port = 4599L, browser = c('firefox'))
-rclient <- rD[['client']]
+rD <- rsDriver(port = 4598L, browser = c('firefox'))
+rclient <- rD$client
 rclient$navigate(startlink)
 
 
-#cookies - not working
+#cookies - not working. Must click manually
 #rclient$findElement(using = "xpath",'//button[cotains(text(),"Tillad alle"')
 #allc <- rclient$getAllCookies()
 #saveRDS(allc,"mycookies.rds")
 
-#rvest
 maincartag=".bb-listing-clickable"
-xresdf = data.frame(matrix(ncol=13, nrow=0))
+nresdf = data.frame(matrix(ncol=13, nrow=0))
 nresnames=c("id","dealer","mpg","milage","year","price","nn","make","type","maketype","region","link","scrapedate")
-colnames(xresdf) = nresnames
+colnames(nresdf) = nresnames
 
-maxlimit=100
+# how many times (x32)
+maxlimit=10
+stableTime=3
 
-
-baselooplink="https://www.bilbasen.dk/brugt/bil?includeengroscvr=true&pricefrom=0&includeleasing=false&page="
+#base-link for paging
 baselooplink='https://www.bilbasen.dk/brugt/bil/ford?make=toyota&make=volvo&Fuel=1&PriceFrom=0&ZipCode=0000&IncludeEngrosCVR=True&Seller=1&IncludeSellForCustomer=True&IncludeWithoutVehicleRegistrationTax=True&IncludeLeasing=False&IncludeCallForPrice=False&HpFrom=&HpTo=&page='
-rclient$navigate(baselooplink)
 
-# for manual test
-testbaselooplink='https://www.bilbasen.dk/brugt/bil/Ford?make=Toyota&make=Volvo&IncludeEngrosCVR=true&PriceFrom=0&includeLeasing=false&Fuel=1&IncludeCallForPrice=false&page=1'
-rclient$navigate(testbaselooplink)
-pagesource <- rclient$getPageSource()
-testcarhtml <- read_html(pagesource[[1]])
-testcarlist <- testcarhtml %>% html_nodes(maincartag)
-testcar = testcarlist[[4]]
+#navigate to page. Remember manually accept cookies
+rclient$navigate(baselooplink)
 
 for (counter in (1:maxlimit)) {
   log_print(c("counter: ",counter))
-  #pagesource <- rclient$getPageSource()
-  #carhtml <- read_html(pagesource[[1]])
   tmplink <- paste0(baselooplink,counter)
-  #print(tmplink)
   carhtml <- read_html(tmplink)
-  Sys.sleep(3)
+  Sys.sleep(stableTime)
   carlist <- carhtml %>% html_nodes(maincartag)
   
   for (car in carlist) {
+    # tmp-datframe for collecting car-data
     tmpdf = as.data.frame(matrix(nrow = 1, ncol = 7))
     colnames(tmpdf) <- names
-    # get id
-    tlink <- gettlink(car)
-      
     
+    # get link
+    tlink <- gettlink(car)
     tmpdf$link=tlink
+    
     #get idtag
     carid <- getcarid(car)
     tmpdf$id=carid
@@ -112,26 +89,13 @@ for (counter in (1:maxlimit)) {
     
     nresdf <- rbind(nresdf,tmpdf)
   }
-  #button=rclient$findElement(using = "class name","next")
-  #button$clickElement()
   counter=counter+1
 }
 
 # save dataframe to file - RDS-format
 saveRDS(nresdf,"firsbb.rds")
 
-
-# save dataframe to mysql - first time only
-
-
-dbWriteTable(condb,"mycars2",nresdfbu,overwrite=T)
-#dbWriteTable(con, "mtcars", datasets::mtcars, overwrite = TRUE)
-
-# get cars from db
-#fetchcars=dbSendQuery(condb,"Select * from cars")
-resdb=dbGetQuery(condb,"Select * from cars")
-
-
+log_close()
 
 getcarid <- function(car) {
   idtag="data-track-content-id"
@@ -184,10 +148,11 @@ gettlink <- function(car) {
  return(tlink)
 }
 
-getdescription <- function(car) {
-  desctag=".listing-description"
- descr <- car %>% 
-      html_nodes(desctag) %>% 
-      html_text()
- return(descr)
-}
+
+# for manual test
+testbaselooplink='https://www.bilbasen.dk/brugt/bil/Ford?make=Toyota&make=Volvo&IncludeEngrosCVR=true&PriceFrom=0&includeLeasing=false&Fuel=1&IncludeCallForPrice=false&page=1'
+rclient$navigate(testbaselooplink)
+pagesource <- rclient$getPageSource()
+testcarhtml <- read_html(pagesource[[1]])
+testcarlist <- testcarhtml %>% html_nodes(maincartag)
+testcar = testcarlist[[4]]
