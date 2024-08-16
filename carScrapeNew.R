@@ -23,9 +23,6 @@
   # find articles
   #carlist=pagecode %>% html_elements("article")
   
-  # test-element
-  #test = carlist[[3]]
-  #class(test)
   prices <- pagecode %>% html_nodes("[class*='Listing_price']") %>% html_text()
   make_model <- pagecode %>% html_nodes("[class*='Listing_makeModel']") %>% html_text()
   details <- pagecode %>% html_nodes("[class*='Listing_details']") %>% html_text()
